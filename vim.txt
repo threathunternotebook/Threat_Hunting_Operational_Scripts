@@ -1,0 +1,104 @@
+VIM
+#create file
+mkdir -p ~/.vim/colors/
+sudo vim ~/.vim/colors/script.vim
+
+#set color script for vim
+echo 'colorscheme script' > ~/.vimrc
+
+------------------------------------------------------------
+# Add these lines to the script.vim
+
+" [] :: Options that are required
+syntax match requiredOptions "\v\[.{-}\]"
+highlight requiredOptions ctermfg=green
+
+" #@ :: Used to designate major breaks in sections
+syntax match majorBreaks "\v#\@.*$"
+highlight majorBreaks cterm= bold ctermfg=252
+
+" #^ :: Used for user steps and sub-comments
+syntax match userSteps "\v#\^.*$"
+highlight userSteps ctermfg=lightblue
+
+" !! :: Used for warnings and important notes
+syntax match warnings "\v!\!.*$"
+highlight warnings cterm=bold ctermfg=red
+
+" ^^ :: Examples
+syntax match examples "\v^\^.*$"
+highlight examples cterm=bold ctermfg=yellow
+
+------------------------------------------------------
+
+
+# Example tshark.script section
+#@##########################@#
+#@                          @#
+#@         TSHARK           @#
+#@                          @#
+#@##########################@#
+
+#$ !!! Note - if using older version of tshark, use '-R' instead of '-Y'  !!!
+
+#^ List all known protocols in a pcap file
+tshark -f [pcap_file] -qz io,phs
+
+#^ List ethernet hosts (source only)
+tshark -r [pcap_file] -Tfields -e "eth.src" | sort | uniq
+
+#^ List ethernet hosts (destination only)
+tshark -r [pcap_file] -Tfields -e "eth.dst" | sort | uniq
+
+#^ List IP Addresses
+tshark -r [pcap_file] -qz ip_hosts,tree
+
+#^ List all ip display filters
+tshark -G fields | awk -F " " '{for(i=1;i<=6;i++) print $i}' grep "^ip\." | uniq | sort
+
+#^ List source ip address, destination ip address, destination tcp port, tcp flags,
+#^ sequence numbers, and tcp length for all packets coming from a specific ip address
+#^ to a specific destination tcp port
+tshark -r [pcap_file] -Y "ip.src==[ip_addr] && tcp.dstport==[port_number]" -e ip.src -e ip.dst -e tcp.dstport -e tcp.flags -e tcp.seq -e tcp.len -E header=y
+
+#^ List Netbios hostnames using NBNS and windows Browser protocols.
+#^ Filter only Windows Browser protocol Host announcements
+tshark -r [pcap_file] -Y "browser.command==1" -Tfields -e "ip.src" -e "browser.server" | uniq
+
+#^ List web browsers (user agents) used in pcap file
+tshark -r [pcap_file] -Y "http.request" -Tfields -e "ip.src" -e "http.user_agent" | uniq
+
+#^ List DNS server response
+tshark -r [pcap_file] -Y "dns.qry.type==1" -Tfields -e dns.qry.name -e dns.resp.addr | awk -F " " '{print $1,$2}' | egrep "[[:space:]][1-9]"
+
+#^ List domain names involved in communication where the first column is the requesting
+#^ host or DNS server ip address, the second column indicates if this is a query (0)
+#^ or a response (1) and the third column shows the query
+tshark -r [pcap_file] -Y "dns" -T fields -e "ip.src" -e "dns.flags.response" -e "dns.qry.name"
+
+#^ Look for "NXDOMAIN" (rcode=3) returned in DNS responses (large number could mean
+#^ kaminsky cache poisoning attempt)
+tshark -r [pcap_file] -Y "dns.flags.response==1 && dns.flag.rcode==3" -Tfields -e ip.src -e ip.dst -e dns.qry.name -e dns.flags.rcode -e dns.id
+
+#^ List the username and password used in ftp login attempts
+tshark -r [pcap_file] -n -Y "ftp.request.command contains PASS || ftp.request.command contains USER"
+
+#^ List http requests where the fisrt column is the source ip address, and the
+#^ last column is the http request-header field
+tshark -r [pcap_file] -Y "http.request" -T fields -e ip.src -e ip.dst -e http.host | sort | uniq
+
+#^ List all web pages requested by all hosts
+tshark -r [pcap_file] -qz http_req,tree
+
+#^ Locate SSL Heartbleed packets
+tshark -r [pcap_file] -Y "tcp.port==443" -Tfields -e ip.src -e ip.dst -e ip.len -e ssl.heartbeat_message.payload_length
+
+#^ Locate possible shellshock packets (look for unusual user agent string)
+tshark -r [pcap_file] -Y "http.request==1" -Tfields -e http.user_agent
+
+#^ In this example, pcap contains DNS TXT records used for C2 and downloading
+#^ imaging file (communications are base64 encoded). We are decoding C2
+#^ communications and extracting image (jpeg) file.
+tshark -r [pcap_file] -Y "dns" -T fields -e dns.txt | while read txt; do echo $txt | base64 -d;done > extracted.txt
+cat extracted.txt | sed 's/FILE://g' | foremost -T -t jpeg -v -o /tmp/jpg
+
