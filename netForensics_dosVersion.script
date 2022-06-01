@@ -1,0 +1,467 @@
+#@ KEYWORD SEARCH
+TCPDUMP
+TSHARK
+SCAPY
+PYTHON
+TCPFLOW
+TCPREPLAY
+CHAOSREADER
+DSNIFF
+AIRCRACK
+ETTERCAP
+P0F
+NDIFF
+NGREP
+
+#@##########################@#
+#@                          @#
+#@         TCPDUMP          @#
+#@                          @#
+#@##########################@#
+
+#^ Common macros used in tcpdump filters
+	host
+	net
+	port
+	src host
+	dst host
+	src host
+	dst host
+	src net
+	dst net
+	src port
+	dst port
+	icmp
+	tcp
+	udp
+
+^^ Macro Examples
+^^	port 22
+^^	dst host 192.168.11.62
+^^	src net 192
+^^	tcp and src host 10.10.10.10 and dst port 80
+
+#^ TCPDump filter formats
+	[protocol_header] [offset:<length>] [relation] [value]
+
+^^ Examples
+^^	'ip[9] = 0x01'   <-- ip protocol is icmp
+^^	'tcp[2:2] != 80' <-- tcp destination port is not 80
+^^	'udp [4:2] > 0'  <-- udp destination port is greater than 0 
+^^	'icmp[0] = 0x03 && icmp[1] = 0x01' <-- icmp type is 3 and icmp code is 1 (host unreachable)
+
+#^ Bit Masking
+	1 = preserve a corresponding bit value
+	0 = discard a corresponding bit value
+
+#^ Perserve the lower 4 bits of byte zero in ip header
+	'ip[0] & 0x0f'
+#^ So this...
+	'ip[0] & 0x0f = 5'
+#^ means to look for a value of 5 in the lower 4 bits of  byte
+#^ offset 0 of the ip header. This represents the ip header length
+#^ of 20 (5*4)
+
+#^ Look for ip packets in pcap where ip header length is greater than 20
+tcpdump -nn -r [pcap_file] ip and 'ip[0] & 0x0f > 5'
+
+#^ TCP Flag Byte Values ( tcp[13] )
+
+2^3 2^2 2^1 2^0 | 2^3 2^2 2^1 2^0
+cwr ece urg ack | psh rst syn fin
+
+	'tcp[13] = 0x01'	<-- fin bit only set
+	'tcp[13] = 0x02'	<-- syn bit only set
+	'tcp[13] = 0x03'	<-- syn/fin bits only set
+	'tcp[13] = 0x04'	<-- rst bit only set
+	'tcp[13] = 0x05'	<-- fin/rst bits only set
+	'tcp[13] = 0x18'	<-- ack/psh bits only set
+	'tcp[13] = 0xff'	<-- all flags set
+
+#^ Look for tcp packets with only syn bit set (good way to fins a syn scan)
+tcpdump -nn -r [pcap_file] tcp and 'tcp[13] = 0x02'
+
+#^ Look for tcp packets that must have syn/ack bit set (other flags can be set as well)
+tcpdump -nn -r [pcap_file] tcp and 'tcp[13] & 0x12 = 0x12'
+
+#^ Look for tcp packets that must have at least a syn or fin bit set (other flags can be set as well)
+tcpdump -nn -r [pcap_file] tcp and 'tcp[13] & 0x03 != 0'
+
+#^ Look for tcp packets with syn/ack bits set (good way to find ports that are open)
+tcpdump -nn -r [pcap_file] tcp and 'tcp[13] = 0x12'
+
+#^ Show absolute sequence numbers for tcp packets
+tcpdump -ntS -r [pcap_file]
+
+#^ Get DNS name (CNAME or A records)
+tcpdump -n -r [pcap_file 'udp port 53' | grep -I CNAME <-- (or grep A for A records)
+
+#^ Look for tcp packets where the tcp header length is equal to 32 byte (8*4)
+#^ TCP header length is upper nibble of tcp byte offset 12
+^^ Example option 1: Discard lower-order nibble
+tcpdump -nn -r [pcap_file] tcp and 'tcp[12] & 0xf0 = 0x80'
+^^ Example option 2: discard lower nibble and divide by 16 to treat as low-order nibble value
+tcpdump -nn -r [pcap_file] tcp and '(tcp[12] & 0xf0)/16 = 8'
+^^ Example option 3: Shift the bits 4 positions to the right to discard lower nibble and treat as low-order nibble value
+tcpdump -nn -r [pcap_file] tcp and 'tcp[12] >> 4 = 8'
+
+^^ Example: Write filter to display records that have destination network of 10.10.10/24
+^^ and the value in final octet ranges from 208-223 and 240-255
+tcpdump -nn -r [pcap_file] dst net 10.10.10 and 'ip[19] & 0xd0 = 0xd0'
+
+#^ Find all ports for a specific source host that was scanned
+tcpdump -nnt -r [pcap_file] src host [src_ip_address] and 'tcp[13] = 0x12' | awk -F " " '{print $2}' cut -f 5 -d '.' | sort -u -n
+
+#^ Look for SSL Heartbleed in pcap file
+tcpdump -nvvA -r [pcap_file] 'tcp src port 443 and (tcp[((tcp[12] & 0xf0) >> 4)*4] = 0x18) and (tcp[((tcp[12] & 0xf0) >> 4)*4+1] = 0x03) and (tcp[((tcp[12] & 0xf0) >> 4)*4+2] < 0x04) and ((ip[2:2] - 4 * (ip[0] & 0x0f) - 4 * ((tcp[12] & 0xf0) >> 4) > 69))'
+
+
+#@##########################@#
+#@                          @#
+#@         TSHARK           @#
+#@                          @#
+#@##########################@#
+
+#$ !!! Note - if using older version of tshark, use '-R' instead of '-Y'  !!!
+
+#^ List all known protocols in a pcap file
+tshark -f [pcap_file] -qz io,phs
+
+#^ List ethernet hosts (source only)
+tshark -r [pcap_file] -Tfields -e "eth.src" | sort | uniq
+
+#^ List ethernet hosts (destination only)
+tshark -r [pcap_file] -Tfields -e "eth.dst" | sort | uniq
+
+#^ List IP Addresses
+tshark -r [pcap_file] -qz ip_hosts,tree
+
+#^ List all ip display filters
+tshark -G fields | awk -F " " '{for(i=1;i<=6;i++) print $i}' grep "^ip\." | uniq | sort
+
+#^ List source ip address, destination ip address, destination tcp port, tcp flags,
+#^ sequence numbers, and tcp length for all packets coming from a specific ip address
+#^ to a specific destination tcp port
+tshark -r [pcap_file] -Y "ip.src==[ip_addr] && tcp.dstport==[port_number]" -e ip.src -e ip.dst -e tcp.dstport -e tcp.flags -e tcp.seq -e tcp.len -E header=y
+
+#^ List Netbios hostnames using NBNS and windows Browser protocols.
+#^ Filter only Windows Browser protocol Host announcements
+tshark -r [pcap_file] -Y "browser.command==1" -Tfields -e "ip.src" -e "browser.server" | uniq
+
+#^ List web browsers (user agents) used in pcap file
+tshark -r [pcap_file] -Y "http.request" -Tfields -e "ip.src" -e "http.user_agent" | uniq
+
+#^ List DNS server response
+tshark -r [pcap_file] -Y "dns.qry.type==1" -Tfields -e dns.qry.name -e dns.resp.addr | awk -F " " '{print $1,$2}' | egrep "[[:space:]][1-9]"
+
+#^ List domain names involved in communication where the first column is the requesting
+#^ host or DNS server ip address, the second column indicates if this is a query (0)
+#^ or a response (1) and the third column shows the query
+tshark -r [pcap_file] -Y "dns" -T fields -e "ip.src" -e "dns.flags.response" -e "dns.qry.name"
+
+#^ Look for "NXDOMAIN" (rcode=3) returned in DNS responses (large number could mean
+#^ kaminsky cache poisoning attempt)
+tshark -r [pcap_file] -Y "dns.flags.response==1 && dns.flag.rcode==3" -Tfields -e ip.src -e ip.dst -e dns.qry.name -e dns.flags.rcode -e dns.id
+
+#^ List the username and password used in ftp login attempts
+tshark -r [pcap_file] -n -Y "ftp.request.command contains PASS || ftp.request.command contains USER"
+
+#^ List http requests where the fisrt column is the source ip address, and the
+#^ last column is the http request-header field
+tshark -r [pcap_file] -Y "http.request" -T fields -e ip.src -e ip.dst -e http.host | sort | uniq
+
+#^ List all web pages requested by all hosts
+tshark -r [pcap_file] -qz http_req,tree
+
+#^ Locate SSL Heartbleed packets 
+tshark -r [pcap_file] -Y "tcp.port==443" -Tfields -e ip.src -e ip.dst -e ip.len -e ssl.heartbeat_message.payload_length
+
+#^ Locate possible shellshock packets (look for unusual user agent string)
+tshark -r [pcap_file] -Y "http.request==1" -Tfields -e http.user_agent
+
+#^ In this example, pcap contains DNS TXT records used for C2 and downloading
+#^ imaging file (communications are base64 encoded). We are decoding C2
+#^ communications and extracting image (jpeg) file.
+tshark -r [pcap_file] -Y "dns" -T fields -e dns.txt | while read txt; do echo $txt | base64 -d;done > extracted.txt
+cat extracted.txt | sed 's/FILE://g' | foremost -T -t jpeg -v -o /tmp/jpg
+
+
+
+#@##########################@#
+#@                          @#
+#@          SCAPY           @#
+#@                          @#
+#@##########################@#
+
+#^ Start Scapy
+scapy
+
+#^ Import Scapy as python module
+sudo python
+>>> from Scapy.all import *
+
+#^ List all protocols supported by Scapy
+>>> ls()
+
+#^ See TCP fields available for interaction
+>>> ls(TCP)
+
+#^ List all functions supported by Scapy
+>>> lsc()
+
+#^ Get help with a function
+>>> lsc([function_name])
+
+#^ Send a syn packet from source ip address to a destination ip address
+i=ip(src=["src_ip"], dst=["dst_ip"])
+t=TCP(sport=[src_port], dport=[dst_port], window=8192, seq=12345, flag="S", options=[('mss',1460)])
+syn=i/t
+send(syn)
+
+#^ Read pcap and grab DNS packets
+
+packets = rdpcap('[pcap_file]')
+
+for packet in packets:
+    if DNSQR in packet:
+        print packet
+
+#^ Read pcap and look for a specific DNS Transaction ID
+
+packets = rdpcap('[pcap_file]')
+
+for packet in packets:
+    if DNSQR in packet:
+        if packet[DNS].id == [transaction_id_hex]:
+            data = packet[DNS].an.rdata
+            print data
+
+
+
+
+#@##########################@#
+#@                          @#
+#@         PYTHON           @#
+#@                          @#
+#@##########################@#
+
+
+
+#@##########################@#
+#@                          @#
+#@         TCPFLOW          @#
+#@                          @#
+#@##########################@#
+
+#^ Displays TCP conversations
+#^ Each side displayed/stored separately
+#^ Live of read-back mode
+#^ BPF filters available to select specific conversations
+
+#^ Read pcap and print output to screen
+tcpflow -C -r [pcap_file]
+
+
+#@##########################@#
+#@                          @#
+#@        TCPREPLAY         @#
+#@                          @#
+#@##########################@#
+
+#^ For editing and replaying traffic
+#^ Emulates attacker and victim
+#^ Tests are fully repeatable
+#^ Replay pcap files at arbitrary speed
+#^ Can be used to test IDS/IPS
+
+#^ Replay as fast as possible
+tcpreplay -v -i [interface] -t [pcap_file]
+
+#^ Replay at 10MBPS
+tcpreplay -M 10.0 -i [interface] [pcap_file]
+
+#^ Replay at .5 packets per second
+tcpreplay -p 0.5 -i [interface] [pcap_file]
+
+#^ Loop through pcap file 10 times
+tcpreplay -l 10 -i [interface] [pcap_file]
+
+#^ You have a pcap file of HTTP client/server traffic captured from a different network that you want to
+#^ replay through a IPS or other transparent inline device.
+
+^^ Solution:
+^^
+^^ There is a three step process for this:
+
+^^    Determine which packets are client->server and server->client
+^^    Rewrite IP addresses based on their direction
+^^    Send packets through inline device 
+
+^^ Step 1
+
+#^ Use tcpprep to split traffic based on the source/destination port:
+
+tcpprep --port --cachefile=example.cache --pcap=example.pcap
+
+#^ In this case, all the packets directed to a TCP or UDP port < 1024 are considered client->server,
+#^ while other packets are server->client. This information is stored in a tcpprep cache file called example.cache for later use.
+
+#$ Note: tcpprep supports many other methods of splitting traffic then just port mode.
+
+^^ Step 2
+
+#^ Use tcprewrite to change the IP addresses to the local network:
+
+tcprewrite --endpoints=172.16.0.1:172.16.5.35 --cachefile=example.cache --infile=example.pcap --outfile=new.pcap
+
+#^ Here, we want all traffic to appear to be between two hosts: 172.16.0.1 and 172.16.5.35.
+#^ We want one IP to be the "client" and the other IP the "server", so we use the cache file created in the last step.
+
+^^ Step 3
+
+#^ Use tcpreplay to send the traffic through the IPS:
+
+tcpreplay --intf1=eth0 --intf2=eth1 --cachefile=example.cache new.pcap
+
+#^ Here we send the traffic. Since we want to split traffic between two interfaces (eth0 and eth1),
+#^ we use the cache file created in Step #1 with the new.pcap created in Step #2.
+#^ We can use the cache file for different pcap files because while the IP addresses of the packets have changed,
+#^ their order and semantics have not. 
+
+
+#@##########################@#
+#@                          @#
+#@       CHAOSREADER        @#
+#@                          @#
+#@##########################@#
+
+#^ Traces UDP/TCP sessions
+#^ Extracts application data from packets
+#^ Rebuilds various protocols from libpcap file
+#^ Produces HTML index file with session details
+#^ Runs live or read-back mode
+
+#^ Replay everythong into HTML and forgo sending output to the screen.
+#^ Write to /tmp/chaosreader directory (-D)
+
+chaosreader -eq [pcap_file] -D /tmp/chaosreader
+
+#^ Look to see if chaosreader generated any .replay files.
+#^ These can be replayed by:
+perl session_file.replay 10   <-- accelerate playback 10 times faster
+
+
+#@##########################@#
+#@                          @#
+#@         DSNIFF           @#
+#@                          @#
+#@##########################@#
+
+#^ Sniff usernames and passwords from a pcap file
+dsniff -p [pcap_file]
+
+#@##########################@#
+#@                          @#
+#@        AIRCRACK          @#
+#@                          @#
+#@##########################@#
+
+#^  Can recover wep and wpa-psk keys for an AP from a pcap file
+
+aircrack-ng [options] [pcap_file]
+
+#^ Options include:
+	-a <amode> 	-- Forces either wep (value of 1) or wpa/wpa-psk (value of 2) cracking
+	-b <bssid> 	-- BSSID value (AP mac address) used to select target network for key cracking
+	-e <essid> 	-- ESSID value (usually the ssid) used to select target network for key cracking
+	-k         	-- Invokes korek wep cracking method
+	-z         	-- Invoke the PTW wep cracking method (default)
+	-w <word-list>	-- Used to specify path of a wordlist for WPA dictionary attack
+
+^^ Examples:
+
+#^ Recover a wep key for an AP with MAC address 00:11:22:33:44:55
+aircrack-ng -b 00:11:22:33:44:55 [pcap_file]
+
+#^ Recover the WPA-PSK key for an AP with MAC address 00:11:22:33:44:55
+aircrack-ng -b 00:11:22:33:44:55 -w [password_list_file] [pcap_file]
+
+
+#@##########################@#
+#@                          @#
+#@        ETTERCAP          @#
+#@                          @#
+#@##########################@#
+
+#^ Fingerprint host from a pcap file
+ettercap -Tq -r [pcap_file] -L /tmp/info
+etterlog /tmp/info.eci
+
+#^ Start ettercap sniffing
+ettercap -T -i [interface]
+
+#^ ARP spoof router and act as mitm.
+#^ Sniff for passwords and log them.
+ettercap -Tq -i [interface] -M arp:remote -l /tmp/passwords
+etterlog /tmp/passwords.eci
+
+
+#@##########################@#
+#@                          @#
+#@           P0F            @#
+#@                          @#
+#@##########################@#
+
+#^ Fingerprint hosts from a pcap file
+p0f -r [pcap_file]
+
+#^ File that contains p0f signatures is: p0f.fp
+#^ If p0f cannot find p0f.fp file. use:
+p0f -f [path_to_p0f.pf] -r [pcap_file]
+
+#^ Capture traffic on interface. Save resules in log file
+p0f -i [interface] -o session.log
+
+
+#@##########################@#
+#@                          @#
+#@          NDIFF           @#
+#@                          @#
+#@##########################@#
+
+#^ Used to compare two nmap scans that were output as XML files.
+#^ The idea is to look for different hosts or ports that may have benn activated.
+
+ndiff -v [first_xml_file.xml] [second_xml_file.xml]
+
+
+#@##########################@#
+#@                          @#
+#@          NGREP           @#
+#@                          @#
+#@##########################@#
+
+#^ Simple packet pettern matches
+#^ Command line options include:
+	
+	-X	  -- Treat match expression as hexidecimal string
+	-V	  -- Display version information
+	-i	  -- Ignore cae foe regular expression
+	-w	  -- Match the regex expression as a word
+	-q	  -- Don't output any info other than packet headers and payloads
+	-I	  -- Pcap filename to read
+	-v	  -- invert the match; only display packets that don't match
+	-D	  -- When reading pcap files, replay at their recoded intervals
+	-O [file] -- Write matched packets to a pcap file
+	-d	  -- Select device
+	-W	  -- Specify alternate method of displaying packets
+	-t	  -- Print timestamp: YYYY/MM/DD HH:MM:SS.UUUU on match
+	-T	  -- Print timestamp: +S.UUUUUU delta between matches
+
+#^ Search for string ".exe" in pcap file
+ngrep -I [pcap_file] -W byline ".exe" -i
+
+ 
+	
+
+

@@ -1,0 +1,250 @@
+#@ Keyword Search @#
+LINUX
+SERVICES
+IPTABLES
+CHATTR
+MOUNT
+SUDOERS
+LOGS
+
+#@##########################@#
+#@                          @#
+#@           LINUX          @#
+#@                          @#
+#@##########################@#
+
+#^ Look for running processes
+ps aux
+
+#^ show all files and ports used by running process
+lsof -p [pid]
+
+#^ View start-up services and run levels
+chkconfig --list
+
+#^ Look for unusual SUID root files
+find / -uid 0 -perm -4000 -print
+
+#^ Look for unusual large files (Greater to 10 MBS)
+find / -size +10000k -print
+
+#^ Look for files named with dots and spaces ("...", " ..", " . ", and " ")
+find / -name " " -print
+find / -name "..." -print
+find / -name " .." -print
+find / -name " . " -print
+
+#^ Show all processes that have open files with 
+#^ link count less than 1
+lsof +L1
+
+#^ On RH, verify all installed packages
+rpm -Va
+
+#^ Look for unusual port listeners
+lsof -i
+netstat -nap
+
+#^ Look for unusual ARP entries
+arp -a
+
+#^ Look for cron jobs scheduled by root and any other UID 0 accounts
+crontab -u root -l  
+
+#^ Look for unusual system-wide cron jobs
+cat /etc/crontab
+ls /etc/cron.*
+
+#^ Look in /etc/passwd for new accounts, sorted from lowest to highest UID
+sort -nk3 -t: /etc/passwd | less
+
+#^ Look for UID and GID 0 accounts
+grep :0: /etc/passwd
+
+#^ Look for files whose owner UID isn't assigned to a user
+find / -nouser -print
+
+#^ find recently modified files within 1 day
+find /etc -mtime -1 -print
+
+#^ Find all subdirectories
+find /dev -type d -print
+
+#^ Run command on all files
+find /dev -type d -exec ls -ld {} \;
+
+#^ Find SUID/SGID files
+find / -type f -perm -4000 -o -perm -2000 -ls
+
+#@##########################@#
+#@                          @#
+#@       SUDOERS FILE       @#
+#@                          @#
+#@##########################@#
+
+#^ Add user "student" to sudoers file
+echo "student ALL=(ALL) ALL" >> /etc/sudoers
+cat /etc/ sudoers
+
+#@##########################@#
+#@                          @#
+#@          CHATTR          @#
+#@                          @#
+#@##########################@#
+
+#^ change attribute (no one, even root, can make changes to file if immutable flag set)
+chattr +i [filename]
+#^ to see if the above is set
+lsattr [filename]
+#^ To remove immutable flag
+chattr -i [filename]
+#@##########################@#
+#@                          @#
+#@           MOUNT          @#
+#@                          @#
+#@##########################@#
+
+#^ Mount remote windows share without username and password
+mkdir /mnt/windowsShare
+mount -t cifs //10.10.202.103/fileshare -o user=,password= /mnt/windowsShare
+#@##########################@#
+#@                          @#
+#@           LOGS           @#
+#@                          @#
+#@##########################@#
+
+#^  The following are binary logs
+#^ wtmp/wtmpx
+#^ utmp/utmpx
+#^ lastlog
+
+#^ Logs to review include
+#^	history logs
+#^	sulog
+#^	httpd
+#^	syslog
+#^	messages\syslog
+#^	secure
+#^	ftp logs
+#^	maillog
+
+#^ wtmp log location (tracks logins, logouts, keeps historical data)
+#^	/var/log/wtmp
+#^ To access wtmp log
+last
+
+#^ utmp log location (tracks current logged in user)
+#^	/var/run/utmp
+#^ To access utmp log
+w
+
+#^ lastlog
+
+#^ sulog location (records usage of the su command)
+#^	/var/log/sulog
+
+#^ FTP log location
+#^ /var/log/xferlog
+
+#^ maillog (sends its log to syslog)
+
+#^ syslog message location
+#^	/var/log/messages
+
+#^ syslogd configuration file
+#^	/etc/syslog.conf
+
+#@##########################@#
+#@                          @#
+#@       SERVICES           @#
+#@                          @#
+#@##########################@#
+
+#$ !!! Note - Examples of Securing Linux Systems  !!!
+
+#^ List all known protocols in a pcap file
+
+#^ List, stop and disable a service
+sudo systemctl list-unit-files | grep enabled
+sudo systemctl stop <service name>
+sudo systemctl disable <service name>
+
+#^ Check listening ports
+ss -punta | grep LIST
+
+#@##########################@#
+#@                          @#
+#@        IPTABLES          @#
+#@                          @#
+#@##########################@#
+
+# List iptables rules with line numbers
+iptables -nvL --line-numbers
+
+# List iptables nat rules with line numbers
+iptables -t nat -nvL --line-numbers
+
+#^ To insert rule between 1 and 2, enter:
+iptables -I INPUT 2 -s 192.168.0.0/24 -j ACCEPT
+
+#^ Drop all traffic by default and allow traffic outbound
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+iptables -A INPUT -m state --state NEW,ESTABLISHED -j ACCEPT
+
+#^ Allow specific IP addresses inbound on an interface
+iptables -A INPUT -i eth1 -s 192.168.0.0/24 -j ALLOW
+
+#^ Allow from a range of IP addresses
+#^ Only accept connection to tcp port 22 (ssh) if ip is between 192.168.1.100 and 192.168.1.200 ##
+iptables -A INPUT -p tcp --destination-port 22 -m iprange --src-range 192.168.1.100-192.168.1.200 -j ACCEPT
+
+#^ Allow inbound traffic to a specific service/port
+iptables -A INPUT -i eth1 -p tcp --dport 80 -j ALLOW
+
+#^ Log dropped packets. Should be at end of INPUT table.
+iptables -A INPUT -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "IP_Dropped_traffic: "
+
+#^ Allow popular services from specific IP addresses.
+#^ Replace ACCEPT with DROP to block port:
+#^ open port ssh tcp port 22
+iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p tcp --dport 22 -j ACCEPT
+ 
+#^ open cups (printing service) udp/tcp port 631 for LAN users ##
+iptables -A INPUT -s 192.168.1.0/24 -p udp -m udp --dport 631 -j ACCEPT
+iptables -A INPUT -s 192.168.1.0/24 -p tcp -m tcp --dport 631 -j ACCEPT
+ 
+#^ allow time sync via NTP for lan users (open udp port 123) ##
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p udp --dport 123 -j ACCEPT
+ 
+#^ open tcp port 25 (smtp) for all ##
+iptables -A INPUT -m state --state NEW -p tcp --dport 25 -j ACCEPT
+ 
+#^ open dns server ports for all ##
+iptables -A INPUT -m state --state NEW -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -m state --state NEW -p tcp --dport 53 -j ACCEPT
+ 
+#^ open http/https (Apache) server port to all ##
+iptables -A INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT
+ 
+#^ open tcp port 110 (pop3) for all ##
+iptables -A INPUT -m state --state NEW -p tcp --dport 110 -j ACCEPT
+ 
+#^ open tcp port 143 (imap) for all ##
+iptables -A INPUT -m state --state NEW -p tcp --dport 143 -j ACCEPT
+ 
+#^ open access to Samba file server for lan users only ##
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p tcp --dport 137 -j ACCEPT
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p tcp --dport 138 -j ACCEPT
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p tcp --dport 139 -j ACCEPT
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p tcp --dport 445 -j ACCEPT
+ 
+#^ open access to proxy server for lan users only ##
+iptables -A INPUT -s 192.168.1.0/24 -m state --state NEW -p tcp --dport 3128 -j ACCEPT
+ 
+#^ open access to mysql server for lan users only ##
+iptables -I INPUT -p tcp --dport 3306 -j ACCEPT
+

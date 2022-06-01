@@ -1,0 +1,249 @@
+#@ KEYWORD SEARCH
+PYTHON
+BASE64
+ROT13
+CAESAR
+XOR
+GPG
+SSH
+
+
+#@##########################@#
+#@                          @#
+#@           PYTHON         @#
+#@                          @#
+#@##########################@#
+
+#@ BASE64 Decode
+
+>>> "YRIRYGJBCNFFJBEQEBGGRA==".decode(encoding="BASE64")
+         |____________________________|
+                              |--Base64 encoded characters
+
+#@ ROT13 Decode
+
+>>> "YRIRY GJB CNFFJBEQ EBGGRA".decode(encoding="ROT13")
+         |____________________________|
+                               |---Rot13 encoded characters
+
+#@CAESAR Cypher Decode
+
+#^ Script for breaking caesar cypher
+
+#!/usr/bin/python
+import sys
+ 
+ctext = "OMQEMDUEQMEK"
+alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+plaintext = ""
+shift = 1
+ 
+while shift <= 26:
+ for c in ctext:
+  if c in alphabet:
+   plaintext += alphabet[(alphabet.index(c)+shift)%(len(alphabet))]
+ print("Shift used: " + str(shift))
+ print("Ciphertext: " + ctext)
+ print("Plaintext: " + plaintext)
+ shift = shift + 1
+ plaintext = ""
+
+
+#@##########################@#
+#@                          @#
+#@           XOR            @#
+#@                          @#
+#@##########################@#
+
+#@ xortool.py
+
+#^ Options
+
+#^	-l,--key-length
+#^    	  length of the key (integer)
+#^	-c,--char
+#^    	  most possible char (one char or hex code)
+#^	-m,--max-keylen=32
+#^  	  maximum key length to probe (integer)
+#^	-x,--hex
+#^    	  input is hex-encoded str
+#^	-b,--brute-chars
+#^    	  brute force all possible characters
+#^	-o,--brute-printable
+#^    	  same as -b but will only use printable characters for keys
+
+#^ Guess key length
+
+#^ To guess the key length, just provide xor tool with just the encrypted file:
+
+xortool.py [xor_encrypted_file] 
+
+#^ Find the key
+
+#^ Now, let's provide xortool with 2 more arguments:
+
+#^    -l the key length (output from guessing key length)
+#^    -c most frequent byte in binaries (Use 00 if not known)
+
+xortool.py test.txt.xor -l [key_length] -c [freq_byte_binary]
+
+#^ Decrypt
+
+#^ Following files are created by xortool:
+
+#^ xortool_out/filename-char_used-perc_printable.csv
+#^    CSV file that contains the list of output files (decrypted files attempts) with the percentage of printable characters (e.g. 78%)
+
+cat xortool_out/filename-char_used-perc_printable.csv 
+#^ file_name;char_used;perc_printable
+#^ xortool_out/0.out;0;78.0
+
+#^ xortool_out/filename-key.csv
+#^    CSV file that contains the list of output files. For each file, the key used to decrypt the file is displayed
+
+cat xortool_out/cat filename-key.csv 
+#^ file_name;key_repr
+#^ xortool_out/0.out;MYSECRET
+
+#^ xortool_out/{n}.out
+#^    Decrypted text attempts
+
+cat xortool_out/0.out 
+
+#@##########################@#
+#@                          @#
+#@           GPG            @#
+#@                          @#
+#@##########################@#
+
+#@ Use Private/Public keys to encrypt/decrypt file
+#^	- Public key is used to encrypt file
+#^	- Private key is used to decrypt file
+
+#^ Step 1 - Generate GPG private/Public keys
+gpg gen-key
+#^ take defaults if you don't want to use a
+#^ passphrase to decrypt file.  Press 'enter'
+#^ twice when asked for passphrase.  Move
+#^ mouse around to make key generation go
+#^ faster (it takes a while
+
+#^ Step 2 - List your keys
+gpg --list-keys
+
+#^ Step 3 - Export public key to file
+gpg --export --armor [username] > [username]-pubkey.asc
+
+#^ Step 4 - Copy Public Key to other workstations and import key
+gpg --import [username]-pubkey.asc
+
+#^ Step 5 - Encrypt file with public key
+gpg -e -r "[username]" [filename]
+
+#^ Step 6 - Decrypt file with private key
+gpg -d [filename].gpg > [filename]
+
+#@ GPG using symmetric key
+
+#^ Use default gpg encryption configuration
+gpg -c [filename]
+
+#^ Use specific encryption settings
+gpg --symmetric --cipher-algo aes 256 -o [output_filename].gpg [input_filename]
+
+#^ GPG decryption using symmetric key
+gpg [output_filename].gpg   
+
+
+#@##########################@#
+#@                          @#
+#@           SSH            @#
+#@                          @#
+#@##########################@#
+
+#@ Create SSH Login with Private/Public Keys and password
+
+#^ Step 1 - Generate hash on workstation using servers's name
+echo -n [server_name] | md5sum
+
+#^ Step 2 - Generate keys on workstation
+ssh-keygen -b 4096 -f [server_name_hash]
+#^	- Enter passphrase when asked
+#^	- Keys now generated in current working directory
+#^	- names will be:
+#^		{server_name_hash}  	(private key)
+#^		{server_name_hash}.pub	(public key)
+
+#^ Step 3 - Copy public key to server
+ssh-copy-id -i [server_name_hash].pub [user_name]@[server_ip_addr]
+#^	- Above command copies public key to the /[user_Home_dir]/.ssh/authorized_keys file
+#^	  on server.  Make sure permissions are 0644 on this file.
+
+#^ Step 4 - Move the private key on your linux workstation to the /[user]/.ssh folder
+
+#^ Step 5 - Restart sshd service on the server
+service sshd restart
+
+#^ Step 6 - From linux workstation, use private key to ssh to server
+ssh -i /[user_Home_dir]/.ssh/[server_name_hash] [server_ip_address]
+
+#^ Step 7 - Turn off ssh password authentication feature for the server
+vim /etc/ssh/sshd_config
+RSAAuthentication yes
+PubKeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+PasswordAuthentication no
+#^ Save configuration
+
+#^ Step 8 - restart sshd service on server
+
+#@ SSH Local Port Forwarding
+
+#^ In this scenario, we don't have access to a server
+#^ because it is blocked by a firewall, but we do have
+#^ ssh access to a server beyond firewall
+
+#^
+#^ AP <----|----> SSH Server <--------> Web Server
+#^ 8080 ---|--------> 22 ----------------> 80
+#^         |
+#^      Firewall
+
+#^ On AP:
+ssh -L 8080:[webserver_addr]:80 [user_name]@[ssh_Server_addr]
+
+#@ SSH Remote Port Forwarding
+
+#^ In this scenario, we want someone outside our firewall to connect to us.
+#^ Our AP only has connection to an outside server with sshd running
+
+#^
+#^ AP <----|----> SSH Server  target
+#^ 80 <----|------- 22 
+#^         |        8080 <------  
+#^      Firewall
+
+#^ On AP:
+ssh -R 8080:localhost:80 [user_name]@[ssh_server_addr]
+
+#^ The above will open a port 8080 on the ssh server for the 
+#^ target to connect.  Traffic is forwarded through the ssh tunnel
+#^ and the AP converts traffic to localhost:80
+
+#^ Note: /etc/ssh/sshd_config on ssh server must have "Gateway Ports yes" in config file
+
+#@ SSH SOCKS Proxy
+
+ssh -f -N -D [local_port_number] [socks_proxy_server_ip]
+
+#^ Point browser to 127.0.0.1[local_port_number]
+
+#^ Can use proxychains to forward command-line traffic (i.e. nmap) through proxy
+
+vim /etc/proxychains.conf
+#^ At bottem of file add:
+socks5 127.0.0.1 [local_port_number]
+
+#^ Use proxychains as follows:
+proxychains4 nmap -sV [ip_addr]
+
