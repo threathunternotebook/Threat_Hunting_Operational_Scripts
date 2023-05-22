@@ -66,3 +66,7 @@ tshark -r [pcap_file] -Y "http.request==1" -Tfields -e http.user_agent
 #^ communications and extracting image (jpeg) file.
 tshark -r [pcap_file] -Y "dns" -T fields -e dns.txt | while read txt; do echo $txt | base64 -d;done > extracted.txt
 cat extracted.txt | sed 's/FILE://g' | foremost -T -t jpeg -v -o /tmp/jpg
+
+#^ Extract a file from a UDP stream. Here we extract a text file from a tftp stream
+tshark -r [pcap_file] -Y "tftp and ip.src_host == [src_ip] and ip.dst_host == [dst_ip]" -Tfields -e data | grep -v -P "^$" | tr -d "\n" > tftp.hex
+xxd -r -p tftp.hex > tftp.txt
