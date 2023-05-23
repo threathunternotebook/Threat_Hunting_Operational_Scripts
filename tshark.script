@@ -70,3 +70,6 @@ cat extracted.txt | sed 's/FILE://g' | foremost -T -t jpeg -v -o /tmp/jpg
 #^ Extract a file from a UDP stream. Here we extract a text file from a tftp stream
 tshark -r [pcap_file] -Y "tftp and ip.src_host == [src_ip] and ip.dst_host == [dst_ip]" -Tfields -e data | grep -v -P "^$" | tr -d "\n" > tftp.hex
 xxd -r -p tftp.hex > tftp.txt
+
+#^ Find SSN in SMTP Emails. Example is using TCP Stream 0 from a PCAP
+ tshark -r [smtp.pcap] -Y "smtp" -qz follow,tcp,ascii,0 | grep '[0-9]\{3\}-\{0,1\}[0-9]\{2\}-\{0,1\}[0-9]\{4\}'
