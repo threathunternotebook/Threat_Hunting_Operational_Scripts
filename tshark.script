@@ -73,3 +73,6 @@ xxd -r -p tftp.hex > tftp.txt
 
 #^ Find SSN in SMTP Emails. Example is using TCP Stream 0 from a PCAP
  tshark -r [smtp.pcap] -Y "smtp" -qz follow,tcp,ascii,0 | grep '[0-9]\{3\}-\{0,1\}[0-9]\{2\}-\{0,1\}[0-9]\{4\}'
+ 
+ #^ We can loop through a range of TCP Streams associated with SMTP looking for SSNs. Below we look for TCP streams 0 through 255.
+ for ts in {0..255}; do tshark -r [smtp.pcap] -Y "smtp" -qz follow,tcp,ascii,$ts | grep '[0-9]\{3\}-\{0,1\}[0-9]\{2\}-\{0,1\}[0-9]\{4\}'; done
